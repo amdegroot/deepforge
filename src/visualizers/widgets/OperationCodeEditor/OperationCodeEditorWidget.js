@@ -57,5 +57,56 @@ define([
         return header.join('\n');
     };
 
+    // Add the 'return' statement editing
+    OperationCodeEditorWidget.prototype.updateNode = function (desc) {
+        TextEditorWidget.prototype.updateNode.call(this, desc);
+        var text = this.editor.getValue(),
+            index = text.lastIndexOf('return'),
+            currFooter,
+            footer,
+            outputs = desc.outputs.map(output => output[0]).sort(),
+            content;
+
+        currFooter = text.substring(index);
+        content = this.getFooterContent(currFooter);
+        if (content) {
+            // Get the current types in the return statement
+            footer = '\nreturn {';
+            for (var i = 0; i < outputs.length; i++) {
+                footer += `\n   ${outputs[i]} = ${content[outputs[i]]}`;
+                if (i < outputs.length-1) {
+                    footer += ',';
+                }
+            }
+            // Create the new return statement
+            footer += '\n}';
+            text = text.substring(0, index).replace(/\n$/, '') + footer;
+        }
+    };
+
+    OperationCodeEditorWidget.prototype.getFooterContent = function (footer) {
+        var table = footer.replace(/^return\s+{/, ''),
+            unescapedQuote = /[^\\]['"]/g,
+            content = {},
+            pairs = table.split('='),
+            matches,
+            key,
+            value;
+
+        for (var i = 0; i < pairs.length; i+=2) {
+            key = pairs[i];
+            value = pairs[i+1];
+
+            // Watch out for string literals. For now, we just don't provide this feature
+            // on a bad parse FIXME
+            matches = value.match(unescapedQuote);
+            if (matches && matches.length%2 === 1) {  // bad parse
+                return null;
+            }
+            content[key] = value.replace(/^\s*/, '').replace(/\s*$/, '');
+        }
+        return content;
+    };
+
     return OperationCodeEditorWidget;
 });

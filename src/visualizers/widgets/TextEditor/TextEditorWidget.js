@@ -75,7 +75,7 @@ define([
         if (this.activeNode) {
             this.saveTextFor(this.activeNode, text);
         } else {
-            this._logger.error(`Active node is invalid! (${this.activeNode})`);
+            this._logger.warn(`Active node is invalid! (${this.activeNode})`);
         }
     };
 
