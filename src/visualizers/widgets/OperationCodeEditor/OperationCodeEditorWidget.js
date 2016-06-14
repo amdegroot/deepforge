@@ -67,21 +67,28 @@ define([
             outputs = desc.outputs.map(output => output[0]).sort(),
             content;
 
+        if (this.editor.isFocused()) {
+            return;
+        }
+
         currFooter = text.substring(index);
         content = this.getFooterContent(currFooter);
-        if (content) {
-            // Get the current types in the return statement
-            footer = '\nreturn {';
-            for (var i = 0; i < outputs.length; i++) {
-                footer += `\n   ${outputs[i]} = ${content[outputs[i]]}`;
-                if (i < outputs.length-1) {
-                    footer += ',';
-                }
+        // Get the current types in the return statement
+        footer = '\nreturn {';
+        for (var i = 0; i < outputs.length; i++) {
+            footer += `\n   ${outputs[i]} = ${content[outputs[i]] || 'nil'}`;
+            if (i < outputs.length-1) {
+                footer += ',';
             }
-            // Create the new return statement
-            footer += '\n}';
-            text = text.substring(0, index).replace(/\n$/, '') + footer;
         }
+        // Create the new return statement
+        footer += '\n}';
+        if (index > -1) {
+            text = text.substring(0, index).replace(/\n$/, '') + footer;
+        } else {
+            text = text.replace(/\n$/, '') + footer;
+        }
+        this.editor.setValue(text, 2);
     };
 
     OperationCodeEditorWidget.prototype.getFooterContent = function (footer) {
