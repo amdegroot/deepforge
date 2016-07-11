@@ -80,6 +80,9 @@ define([
         //     - if so, don't start any more jobs
         this.pipelineError = null;
         this.runningJobs = 0;
+
+        // Create a lock id
+        this.lockUuid = Math.floor(Math.random()*100000) + '/' + Date.now();
     };
 
     /**
@@ -144,6 +147,9 @@ define([
         return this.core.isTypeOf(prnt, this.META.Inputs);
     };
 
+    ExecutePipeline.prototype.getLockUuid = function () {
+    };
+
     ExecutePipeline.prototype.clearResults = function () {
         var nodes = Object.keys(this.nodes).map(id => this.nodes[id]);
         // Clear the pipeline's results
@@ -162,6 +168,8 @@ define([
         this.core.setAttribute(this.activeNode, 'status', 'running');
         this.logger.info('Setting all jobs status to "pending"');
         this.logger.debug(`Making a commit from ${this.currentHash}`);
+        // Lock the execution
+        this.core.setAttribute(this.activeNode, 'lock', this.lockUuid);
         return this.save(`Initializing ${this.pipelineName} for execution`);
     };
 
@@ -568,6 +576,16 @@ define([
             .fail(e => this.onPipelineComplete(`Operation ${nodeId} failed: ${e}`));
     };
 
+    ExecutePipeline.prototype.hasLock = function () {
+        var lockUuid = this.core.getAttribute(this.activeNode, 'lock');
+        // This is more meaningful once I add the fast-forwarding/auto-merge...
+        // TODO
+        // That is, I wrote this assuming that 'activeNode' has been fast-forwarded
+        // to the latest commit on the given branch. If it isn't fast-forwarded,
+        // this is trivially true
+        return this.lockUuid === lockUuid;
+    };
+
     ExecutePipeline.prototype.onOperationComplete = function (opNode) {
         var name = this.core.getAttribute(opNode, 'name'),
             nextPortIds = this.getOperationOutputIds(opNode),
@@ -575,6 +593,12 @@ define([
             resultPorts,
             jobId = this.core.getPath(jNode),
             hasReadyOps;
+
+        // If the lockuuid doesn't match this one, stop!
+        if (!this.hasLock()) {
+            var msg = `Execution lock is gone. Cancelling execution on ${this.pipelineName}.`;
+            return this.onPipelineComplete(msg);
+        }
 
         // Set the operation to 'success'!
         this.runningJobs--;
