@@ -18,6 +18,8 @@ config.plugin.allowServerExecution = true;
 config.executor.enable = true;
 config.executor.clearOldDataAtStartUp = true;
 
+config.storage.autoMerge.enable = true;
+
 config.visualization.extraCss.push('deepforge/styles/global.css');
 
 validateConfig(config);
