@@ -3,13 +3,13 @@
 
 define([
     'q',
-    'deepforge/plugin/LocalExecutor',
+    'deepforge/plugin/LocalOperations',
     'text!./metadata.json',
     'underscore',
     'plugin/PluginBase'
 ], function (
     Q,
-    LocalExecutor,
+    LocalOperations,
     pluginMetadata,
     _,
     PluginBase
@@ -361,7 +361,7 @@ define([
 
     _.extend(
         CreateExecution.prototype,
-        LocalExecutor.prototype
+        LocalOperations.prototype
     );
 
     return CreateExecution;

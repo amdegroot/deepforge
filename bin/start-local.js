@@ -5,6 +5,7 @@ var spawn = require('child_process').spawn,
     workerJob = null;
 
 process.env.NODE_ENV = 'local';
+process.env.SINGLE_NODE_MODE = true;
 execJob = spawn('npm', [
     'start'
 ]);

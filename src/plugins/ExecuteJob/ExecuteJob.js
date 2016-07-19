@@ -3,9 +3,9 @@
 
 define([
     'text!./metadata.json',
-    'executor/ExecutorClient',
+    'deepforge/executor/index',
     'plugin/PluginBase',
-    'deepforge/plugin/LocalExecutor',
+    'deepforge/plugin/LocalOperations',
     'deepforge/plugin/PtrCodeGen',
     './templates/index',
     'q',
@@ -14,7 +14,7 @@ define([
     pluginMetadata,
     ExecutorClient,
     PluginBase,
-    LocalExecutor,  // DeepForge operation primitives
+    LocalOperations,  // DeepForge operation primitives
     PtrCodeGen,
     Templates,
     Q,
@@ -297,11 +297,7 @@ define([
 
     ExecuteJob.prototype.executeDistOperation = function (job, opNode, hash) {
         var name = this.core.getAttribute(opNode, 'name'),
-            jobId = this.core.getPath(job),
-            executor = new ExecutorClient({
-                logger: this.logger,
-                serverPort: this.gmeConfig.server.port
-            });
+            jobId = this.core.getPath(job);
 
         this.logger.info(`Executing operation "${name}"`);
 
@@ -312,8 +308,7 @@ define([
         this.logger.info(`Setting ${jobId} status to "queued" (${this.currentHash})`);
         this.logger.debug(`Making a commit from ${this.currentHash}`);
         this.save(`Queued "${name}" operation in ${this.pipelineName}`)
-            .then(() => executor.createJob({hash}))
-            .then(() => this.watchOperation(executor, hash, opNode, job))
+            .then(() => this.createExecutorJob(opNode, job, hash))
             .catch(err => this.logger.error(`Could not execute "${name}": ${err}`));
 
     };
@@ -608,73 +603,55 @@ define([
         });
     };
 
-    ExecuteJob.prototype.watchOperation = function (executor, hash, op, job) {
+    ExecuteJob.prototype.createExecutorJob = function (op, job, hash) {
         var jobId = this.core.getPath(job),
             opId = this.core.getPath(op),
-            info,
+            executor,
             name;
 
-        return executor.getInfo(hash)
-            .then(_info => {  // Update the job's stdout
-                var actualLine,  // on executing job
-                    currentLine = this.outputLineCount[jobId];
+        executor = new ExecutorClient({
+            logger: this.logger,
+            gmeConfig: this.gmeConfig
+        });
+        executor.createJob(hash);
+        executor.on('stdout', output => {
+            var stdout = this.core.getAttribute(job, 'stdout'),
+                jobName = this.core.getAttribute(job, 'name');
 
-                info = _info;
-                actualLine = info.outputNumber;
-                if (actualLine !== null && actualLine >= currentLine) {
-                    this.outputLineCount[jobId] = actualLine + 1;
-                    return executor.getOutput(hash, currentLine, actualLine+1)
-                        .then(outputLines => {
-                            var stdout = this.core.getAttribute(job, 'stdout'),
-                                output = outputLines.map(o => o.output).join(''),
-                                jobName = this.core.getAttribute(job, 'name');
+            stdout += output;
+            this.core.setAttribute(job, 'stdout', stdout);
+            return this.save(`Received stdout for ${jobName}`);
+        });
 
-                            stdout += output;
-                            this.core.setAttribute(job, 'stdout', stdout);
-                            return this.save(`Received stdout for ${jobName}`);
-                        });
-                }
-            })
-            .then(() => {
-                if (info.status === 'CREATED' || info.status === 'RUNNING') {
-                    if (info.status === 'RUNNING' &&
-                        this.core.getAttribute(job, 'status') !== 'running') {
+        executor.on('start', () => {
+            name = this.core.getAttribute(job, 'name');
+            this.core.setAttribute(job, 'status', 'running');
+            this.save(`Started "${name}" operation in ${this.pipelineName}`);
+        });
 
-                        name = this.core.getAttribute(job, 'name');
-                        this.core.setAttribute(job, 'status', 'running');
-                        this.save(`Started "${name}" operation in ${this.pipelineName}`);
+        executor.on('end', (status, hashes) => {
+            name = this.core.getAttribute(job, 'name');
+            this.core.setAttribute(job, 'execFiles', hashes[name + '-all-files']);
+            return this.blobClient.getArtifact(hashes.stdout)
+                .then(artifact => {
+                    var stdoutHash = artifact.descriptor.content[STDOUT_FILE].content;
+                    return this.blobClient.getObjectAsString(stdoutHash);
+                })
+                .then(stdout => {
+                    this.core.setAttribute(job, 'stdout', stdout);
+                    if (status !== 'SUCCESS') {
+                        // Set the job to failed! Store the error
+                        this.onOperationFail(op, `Operation "${opId}" failed! ${status}`); 
+                    } else {
+                        this.onDistOperationComplete(op, hashes);
                     }
+                });
+        });
 
-                    setTimeout(
-                        this.watchOperation.bind(this, executor, hash, op, job),
-                        ExecuteJob.UPDATE_INTERVAL
-                    );
-                    return;
-                }
-
-                name = this.core.getAttribute(job, 'name');
-                this.core.setAttribute(job, 'execFiles', info.resultHashes[name + '-all-files']);
-                return this.blobClient.getArtifact(info.resultHashes.stdout)
-                    .then(artifact => {
-                        var stdoutHash = artifact.descriptor.content[STDOUT_FILE].content;
-                        return this.blobClient.getObjectAsString(stdoutHash);
-                    })
-                    .then(stdout => {
-                        this.core.setAttribute(job, 'stdout', stdout);
-                        if (info.status !== 'SUCCESS') {
-                            // Download all files
-                            this.result.addArtifact(info.resultHashes[name + '-all-files']);
-                            // Set the job to failed! Store the error
-                            this.onOperationFail(op, `Operation "${opId}" failed! ${JSON.stringify(info)}`); 
-                        } else {
-                            this.onDistOperationComplete(op, info);
-                        }
-                    });
-            })
-            .catch(err => this.logger.error(`Could not get op info for ${opId}: ${err}`));
+        executor.on('error', err => this.logger.error(`${opId} error: ${err}`));
     };
 
-    ExecuteJob.prototype.onDistOperationComplete = function (node, result) {
+    ExecuteJob.prototype.onDistOperationComplete = function (node, hashes) {
         var nodeId = this.core.getPath(node),
             outputMap = {},
             outputs;
@@ -690,7 +667,7 @@ define([
 
                 // this should not be in directories -> flatten the data!
                 return Q.all(outputs.map(tuple =>  // [ name, node ]
-                    this.blobClient.getArtifact(result.resultHashes[tuple[0]])
+                    this.blobClient.getArtifact(hashes[tuple[0]])
                 ));
             })
             .then(artifacts => {
@@ -752,7 +729,7 @@ define([
     _.extend(
         ExecuteJob.prototype,
         PtrCodeGen.prototype,
-        LocalExecutor.prototype
+        LocalOperations.prototype
     );
 
     return ExecuteJob;

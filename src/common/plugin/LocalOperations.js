@@ -5,11 +5,11 @@ define([
 ], function(
 ) {
     'use strict';
-    var LocalExecutor = function() {
+    var LocalOperations = function() {
     };
 
     // Should these be in lua?
-    LocalExecutor.prototype.ArtifactLoader = function(node) {
+    LocalOperations.prototype.ArtifactLoader = function(node) {
         // Get the hash from the output node
         var hash;
         return this.core.loadChildren(node)
@@ -40,7 +40,7 @@ define([
             });
     };
 
-    LocalExecutor.prototype.ArtifactFinder = function(node) {
+    LocalOperations.prototype.ArtifactFinder = function(node) {
         // Check the save dir for a node with the given name
         // that has the given type
         var hash,
@@ -82,7 +82,7 @@ define([
             });
     };
 
-    LocalExecutor.prototype._getSaveDir = function () {
+    LocalOperations.prototype._getSaveDir = function () {
         return this.core.loadChildren(this.rootNode)
             .then(children => {
                 var execPath = this.core.getPath(this.META.Data),
@@ -105,7 +105,7 @@ define([
             });
     };
 
-    LocalExecutor.prototype.Save = function(node) {
+    LocalOperations.prototype.Save = function(node) {
         var nodeId = this.core.getPath(node),
             parentNode;
         
@@ -148,10 +148,10 @@ define([
     };
 
     // Helper methods
-    LocalExecutor.prototype.getLocalOperationType = function(node) {
+    LocalOperations.prototype.getLocalOperationType = function(node) {
         var type;
-        for (var i = LocalExecutor.OPERATIONS.length; i--;) {
-            type = LocalExecutor.OPERATIONS[i];
+        for (var i = LocalOperations.OPERATIONS.length; i--;) {
+            type = LocalOperations.OPERATIONS[i];
             if (!this.META[type]) {
                 this.logger.warn(`Missing local operation: ${type}`);
                 continue;
@@ -163,13 +163,13 @@ define([
         return null;
     };
 
-    LocalExecutor.prototype.isLocalOperation = function(node) {
+    LocalOperations.prototype.isLocalOperation = function(node) {
         return !!this.getLocalOperationType(node);
     };
 
-    LocalExecutor.OPERATIONS = Object.keys(LocalExecutor.prototype)
+    LocalOperations.OPERATIONS = Object.keys(LocalOperations.prototype)
         .filter(name => name.indexOf('_') !== 0)
         .filter(name => name !== 'isLocalOperation' && name !== 'getLocalOperationType');
     
-    return LocalExecutor;
+    return LocalOperations;
 });
