@@ -116,7 +116,7 @@ define([
             job.stderr.on('data', data => error += data);
             job.on('close', code => {
                 if (code !== 0) {
-                    this.emit('error', err);
+                    this.emit('error', error);
                 }
 
                 // Write stderr to file
@@ -125,7 +125,7 @@ define([
                 // Write stdout to file
                 // TODO
 
-                this.onJobComplete();
+                this.onJobComplete(code && error);
             });
         });
     };
@@ -137,6 +137,20 @@ define([
         // Trigger the 'end' event w/ status and artifact hashes
         this.emit('end', err ? 'FAILED' : 'SUCCESS', {});
     };
+
+    LocalExecutor.prototype.saveJobResults = function() {
+        // I can use ExecutorWorker if I create 
+        return ExecutorWorker.prototype.saveJobResults.call(this,
+            this.jobInfo,// TODO: Add the jobInfo
+            this.workingDir,
+            this.config
+        );
+    };
+
+    if (typeof WebGMEGlobal === 'undefined') {
+        LocalExecutor.prototype.sendJobUpdate =
+            ExecutorWorker.prototype.sendJobUpdate;
+    }
 
     return LocalExecutor;
 });
