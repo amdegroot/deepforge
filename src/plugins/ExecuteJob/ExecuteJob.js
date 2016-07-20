@@ -7,6 +7,7 @@ define([
     'plugin/PluginBase',
     'deepforge/plugin/LocalOperations',
     'deepforge/plugin/PtrCodeGen',
+    'deepforge/Constants',
     './templates/index',
     'q',
     'underscore'
@@ -16,6 +17,7 @@ define([
     PluginBase,
     LocalOperations,  // DeepForge operation primitives
     PtrCodeGen,
+    CONSTANTS,
     Templates,
     Q,
     _
@@ -543,7 +545,7 @@ define([
 
                 // Set the line offset
                 var lineOffset = this.getLineOffset(files['main.lua'], code);
-                this.core.setAttribute(node, 'lineOffset', lineOffset);
+                this.core.setAttribute(node, CONSTANTS.LINE_OFFSET, lineOffset);
             });
     };
 
